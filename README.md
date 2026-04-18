@@ -1,98 +1,176 @@
-# Demo chu ky so va ky PDF bang Python
+# RSA Digital Signature Demo
 
-## 1. Chu ky so la gi?
+Hệ thống demo chữ ký số RSA trên file PDF — bao gồm backend (Python/FastAPI) và frontend (Vue 3) với giao diện trực quan hóa luồng mã hóa.
 
-Chu ky so la co che dung **khoa bi mat** de ky len du lieu va dung **khoa cong khai** de xac minh:
+---
 
-- Tai lieu co bi sua sau khi ky hay khong.
-- Ai la nguoi da ky.
-- Nguoi ky co the choi bo chu ky cua minh hay khong.
+## Mục lục
 
-Trong thuc te, chu ky so thuong duoc dung voi:
+- [Tổng quan](#tổng-quan)
+- [Kiến trúc dự án](#kiến-trúc-dự-án)
+- [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
+- [Cài đặt & Chạy](#cài-đặt--chạy)
+  - [Backend](#1-backend-pythonfastapi)
+  - [Frontend](#2-frontend-vue-3)
+- [Chạy CLI demo (không cần web)](#chạy-cli-demo-không-cần-web)
+- [API Endpoints](#api-endpoints)
+- [Hướng dẫn sử dụng Web App](#hướng-dẫn-sử-dụng-web-app)
+- [Lưu ý quan trọng](#lưu-ý-quan-trọng)
 
-- Chung thu so (certificate) do CA cap.
-- Thuat toan bam nhu SHA-256.
-- Thuat toan bat doi xung nhu RSA hoac ECDSA.
+---
 
-## 2. Chu ky so tren PDF hoat dong the nao?
+## Tổng quan
 
-Khi ky PDF:
+### Chữ ký số là gì?
 
-1. Ung dung tinh hash cua cac phan du lieu can bao ve trong file PDF.
-2. Hash do duoc ky bang private key.
-3. Chu ky va thong tin chung thu duoc nhung vao trong file PDF.
-4. Trinh doc PDF dung public key trong certificate de xac minh.
+Chữ ký số là cơ chế dùng **khóa bí mật (private key)** để ký lên dữ liệu và dùng **khóa công khai (public key)** để xác minh:
 
-Neu file bi sua sau khi ky, kiem tra chu ky se that bai.
+- Tài liệu có bị sửa sau khi ký hay không (**Integrity**)
+- Ai là người đã ký (**Authenticity**)
+- Người ký không thể chối bỏ chữ ký (**Non-repudiation**)
 
-## 3. Demo trong thu muc nay
+### Chữ ký số trên PDF hoạt động thế nào?
 
-File `demo_sign_pdf.py` se:
+```
+PDF gốc → Hash (SHA-256) → Ký bằng Private Key (RSA) → Chữ ký số → Nhúng vào PDF
+```
 
-1. Tao mot cap RSA key va certificate tu ky.
-2. Tao file PDF mau.
-3. Chen o chu ky hien thi vao trang dau.
-4. Ky file PDF bang `pyHanko`.
+1. Ứng dụng tính hash (SHA-256) từ nội dung PDF
+2. Hash được ký bằng private key → tạo chữ ký số
+3. Chữ ký và thông tin chứng thư được nhúng vào file PDF
+4. Người nhận dùng public key trong certificate để xác minh
 
-## 4. Cai thu vien
+---
+
+## Kiến trúc dự án
+
+```
+chukyso/
+├── backend/
+│   ├── app.py                  # FastAPI server
+│   └── requirements.txt        # Python dependencies
+├── frontend/
+│   ├── src/
+│   │   ├── components/         # Vue components
+│   │   ├── stores/             # Pinia state management
+│   │   ├── api.js              # API integration
+│   │   ├── App.vue             # Root component
+│   │   ├── main.js             # Entry point
+│   │   └── style.css           # Global styles + animations
+│   ├── index.html
+│   ├── vite.config.js
+│   └── package.json
+├── demo_sign_pdf.py            # CLI: ký PDF
+├── demo_verify_pdf.py          # CLI: xác minh PDF
+├── demo_tamper_pdf.py          # CLI: tạo bản PDF bị sửa đổi
+├── requirements.txt            # Python deps (CLI only)
+├── output/
+│   ├── certs/                  # Chứng thư & khóa
+│   └── pdf/                    # File PDF đầu ra
+└── README.md
+```
+
+---
+
+## Yêu cầu hệ thống
+
+| Thành phần | Phiên bản tối thiểu |
+|---|---|
+| Python | 3.9+ |
+| Node.js | 18+ |
+| npm | 9+ |
+| pip | 21+ |
+
+---
+
+## Cài đặt & Chạy
+
+### 1. Backend (Python/FastAPI)
 
 ```bash
+# Di chuyển vào thư mục dự án
+cd chukyso
+
+# (Khuyến nghị) Tạo virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Cài đặt dependencies
+pip install -r backend/requirements.txt
+
+# Chạy server
+python3 -m uvicorn backend.app:app --reload --port 8000
+```
+
+Backend sẽ chạy tại: **http://localhost:8000**
+
+Kiểm tra: `curl http://localhost:8000/api/health` → `{"status":"ok"}`
+
+### 2. Frontend (Vue 3)
+
+Mở terminal mới:
+
+```bash
+cd chukyso/frontend
+
+# Cài đặt dependencies
+npm install
+
+# Chạy dev server
+npm run dev
+```
+
+Frontend sẽ chạy tại: **http://localhost:5173**
+
+> Vite proxy tự động chuyển tiếp `/api/*` sang backend `localhost:8000`.
+
+### Build production
+
+```bash
+cd frontend
+npm run build      # Output: frontend/dist/
+npm run preview    # Xem bản build tại localhost:4173
+```
+
+---
+
+## Chạy CLI demo (không cần web)
+
+```bash
+# Cài thư viện CLI
 pip install -r requirements.txt
-```
 
-## 5. Chay demo
-
-```bash
+# Ký PDF
 python demo_sign_pdf.py
-```
 
-Sau khi chay xong, ban se thay:
-
-- `output/certs/demo_private_key.pem`
-- `output/certs/demo_certificate.pem`
-- `output/pdf/unsigned_demo.pdf`
-- `output/pdf/signed_demo.pdf`
-
-## 6. Demo xac minh phia nguoi nhan
-
-Nguoi nhan dung certificate cua nguoi gui (certificate nay chua public key) de kiem tra:
-
-```bash
+# Xác minh PDF
 python demo_verify_pdf.py
-```
-
-Neu muon xem them chi tiet:
-
-```bash
 python demo_verify_pdf.py --show-details
-```
 
-Demo se kiem tra:
-
-- PDF co chu ky hay khong.
-- Noi dung co bi sua sau khi ky hay khong.
-- Chu ky ma hoc co hop le hay khong.
-- Certificate dung de xac minh co khop chu ky hay khong.
-
-## 7. Thu truong hop PDF bi sua sau khi ky
-
-Tao mot ban sao da bi sua:
-
-```bash
+# Tạo bản bị sửa đổi (để test INVALID)
 python demo_tamper_pdf.py
-```
-
-Sau do xac minh:
-
-```bash
 python demo_verify_pdf.py --pdf output/pdf/tampered_demo.pdf
 ```
 
-Luc nay ket qua se bao `INVALID`.
+---
 
-## 8. Luu y quan trong
+## API Endpoints
 
-- Day la **demo hoc tap**, dung certificate tu ky.
-- Khi mo PDF da ky, trinh doc co the bao nguoi ky **chua duoc tin cay**.
-- Trong he thong that, ban thuong dung USB token, HSM, smart card, hoac certificate do CA hop le cap.
-# chukyso
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| `GET` | `/api/health` | Kiểm tra server |
+| `POST` | `/api/generate-keys` | Tạo cặp khóa RSA-2048 + certificate |
+| `POST` | `/api/upload` | Upload file PDF, trả về SHA-256 hash |
+| `POST` | `/api/sign` | Ký PDF bằng pyHanko |
+| `POST` | `/api/verify` | Xác minh chữ ký PDF |
+| `GET` | `/api/download/{id}` | Tải file PDF đã ký |
+| `POST` | `/api/tamper` | Tạo bản PDF bị sửa đổi (demo) |
+
+---
+
+## Lưu ý quan trọng
+
+- Đây là **demo học tập**, dùng certificate tự ký (self-signed).
+- Khi mở PDF đã ký, trình đọc có thể báo người ký **chưa được tin cậy**.
+- Trong hệ thống thật, bạn thường dùng USB token, HSM, smart card, hoặc certificate do CA hợp lệ cấp.
+- Không sử dụng cho mục đích production.
