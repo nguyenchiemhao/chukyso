@@ -160,7 +160,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 
 @app.post("/api/sign")
-async def sign_pdf(fileId: str = Form(...), sessionId: str = Form(...)):
+def sign_pdf(fileId: str = Form(...), sessionId: str = Form(...)):
     """Sign an uploaded PDF using the generated key pair."""
     pdf_path = UPLOAD_DIR / f"{fileId}.pdf"
     key_path = CERT_DIR / f"{sessionId}_private_key.pem"
@@ -178,16 +178,18 @@ async def sign_pdf(fileId: str = Form(...), sessionId: str = Form(...)):
         key_passphrase=DEFAULT_PASSPHRASE.encode(),
     )
 
+    sig_field_name = f"Signature_{uuid.uuid4().hex[:8]}"
+
     with pdf_path.open("rb") as infile, signed_path.open("wb") as outfile:
         writer = IncrementalPdfFileWriter(infile)
         fields.append_signature_field(
             writer,
             sig_field_spec=fields.SigFieldSpec(
-                "Signature1", on_page=0, box=(72, 80, 322, 150)
+                sig_field_name, on_page=0, box=(72, 80, 322, 150)
             ),
         )
         meta = signers.PdfSignatureMetadata(
-            field_name="Signature1",
+            field_name=sig_field_name,
             reason="RSA Digital Signature Demo",
             location="Web Application",
             name="Demo Signer",
@@ -242,7 +244,7 @@ async def download_signed(file_id: str):
 
 
 @app.post("/api/verify")
-async def verify_signature(
+def verify_signature(
     file: UploadFile = File(...),
     sessionId: str = Form(...),
 ):
@@ -251,7 +253,7 @@ async def verify_signature(
     if not cert_path.exists():
         raise HTTPException(status_code=404, detail="Certificate not found.")
 
-    contents = await file.read()
+    contents = file.file.read()
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
