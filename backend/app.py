@@ -60,12 +60,12 @@ def _sha256_hex(data: bytes) -> str:
 # ---------------------------------------------------------------------------
 
 @app.get("/api/health")
-async def health():
+def health():
     return {"status": "ok"}
 
 
 @app.post("/api/generate-keys")
-async def generate_keys():
+def generate_keys():
     """Generate an RSA-2048 key pair and self-signed certificate."""
     session_id = uuid.uuid4().hex[:12]
     key_path = CERT_DIR / f"{session_id}_private_key.pem"
@@ -136,12 +136,12 @@ async def generate_keys():
 
 
 @app.post("/api/upload")
-async def upload_pdf(file: UploadFile = File(...)):
+def upload_pdf(file: UploadFile = File(...)):
     """Upload a PDF and return its SHA-256 hash."""
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
-    contents = await file.read()
+    contents = file.file.read()
     if len(contents) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File size exceeds 10 MB limit.")
 
@@ -231,7 +231,7 @@ def sign_pdf(fileId: str = Form(...), sessionId: str = Form(...)):
 
 
 @app.get("/api/download/{file_id}")
-async def download_signed(file_id: str):
+def download_signed(file_id: str):
     """Download a signed PDF."""
     signed_path = SIGNED_DIR / f"{file_id}.pdf"
     if not signed_path.exists():
@@ -317,8 +317,165 @@ def verify_signature(
         }
 
 
+@app.post("/api/verify-external")
+def verify_external(
+    file: UploadFile = File(...),
+    publicKey: str = Form(...),
+):
+    """
+    Verify a signed PDF using an external public key.
+    This allows verifying signatures from outside the current session
+    without requiring local session state.
+    """
+    contents = file.file.read()
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+
+    # Convert public key string to bytes, trim whitespace
+    pub_str = publicKey.strip() if isinstance(publicKey, str) else publicKey.decode().strip()
+    pub_pem_bytes = pub_str.encode()
+
+    try:
+
+        if not (pub_pem_bytes.startswith(b'-----BEGIN') and b'-----END' in pub_pem_bytes):
+            raise HTTPException(
+                status_code=400,
+                detail="Public key must be PEM format (starting with '-----BEGIN PUBLIC KEY-----' and ending with '-----END PUBLIC KEY-----')."
+            )
+
+        # Reject common wrong formats explicitly for better UX.
+        if b'-----BEGIN CERTIFICATE-----' in pub_pem_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="This endpoint verifies with PUBLIC KEY. Please paste '-----BEGIN PUBLIC KEY----- ... -----END PUBLIC KEY-----', not a certificate."
+            )
+
+        if b'-----BEGIN PRIVATE KEY-----' in pub_pem_bytes or b'-----BEGIN RSA PRIVATE KEY-----' in pub_pem_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Private key is not allowed for verification. Please paste a PUBLIC KEY PEM."
+            )
+
+        # Load and validate provided PUBLIC KEY
+        try:
+            provided_pub_key = serialization.load_pem_public_key(pub_pem_bytes)
+            provided_pub_spki_der = provided_pub_key.public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid public key format: {str(e)[:150]}"
+            )
+
+        reader = PdfFileReader(io.BytesIO(contents))
+        signatures = list(reader.embedded_signatures)
+
+        if not signatures:
+            return {
+                "valid": False,
+                "message": "No signatures found in the PDF.",
+                "usedPublicKey": pub_str[:100] + "..." if len(pub_str) > 100 else pub_str,
+                "details": [],
+            }
+
+        results = []
+        all_valid = True
+        for idx, sig in enumerate(signatures, start=1):
+            try:
+                # Verify signature cryptographic integrity first.
+                status = validate_pdf_signature(sig)
+
+                signer_cert = status.signing_cert
+                subject = signer_cert.subject.human_friendly if signer_cert else "Unknown"
+
+                # Compare signer's embedded public key with the provided external key.
+                key_match = False
+                if signer_cert is not None:
+                    signer_cert_der = signer_cert.dump()
+                    signer_x509 = x509.load_der_x509_certificate(signer_cert_der)
+                    signer_pub_key = signer_x509.public_key()
+                    signer_pub_spki_der = signer_pub_key.public_bytes(
+                        serialization.Encoding.DER,
+                        serialization.PublicFormat.SubjectPublicKeyInfo,
+                    )
+                    key_match = signer_pub_spki_der == provided_pub_spki_der
+
+                is_valid = bool(status.intact) and bool(status.valid) and key_match
+                if not is_valid:
+                    all_valid = False
+
+                results.append({
+                    "index": idx,
+                    "fieldName": sig.field_name,
+                    "valid": is_valid,
+                    "keyMatch": key_match,
+                    "intact": bool(status.intact),
+                    "cryptoValid": bool(status.valid),
+                    "coverage": status.coverage.name,
+                    "modificationLevel": status.modification_level.name,
+                    "hashAlgorithm": status.md_algorithm,
+                    "signatureMechanism": str(status.pkcs7_signature_mechanism),
+                    "signer": subject,
+                    "signedAt": (
+                        status.signer_reported_dt.isoformat()
+                        if status.signer_reported_dt
+                        else None
+                    ),
+                })
+            except Exception as sig_error:
+                results.append({
+                    "index": idx,
+                    "fieldName": sig.field_name,
+                    "valid": False,
+                    "error": str(sig_error),
+                })
+                all_valid = False
+
+        return {
+            "valid": all_valid,
+            "message": "VALID SIGNATURE" if all_valid else "INVALID SIGNATURE",
+            "hash": _sha256_hex(contents),
+            "usedPublicKey": pub_str[:100] + "..." if len(pub_str) > 100 else pub_str,
+            "details": results,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {
+            "valid": False,
+            "message": f"Verification failed: {str(e)}",
+            "usedPublicKey": pub_str[:100] + "..." if len(pub_str) > 100 else pub_str,
+            "details": [],
+        }
+
+
+@app.post("/api/export-public-key")
+def export_public_key(sessionId: str = Form(...)):
+    """
+    Export the public key from session certificate for external verification.
+    """
+    cert_path = CERT_DIR / f"{sessionId}_certificate.pem"
+
+    if not cert_path.exists():
+        raise HTTPException(status_code=404, detail="Certificate not found for this session.")
+
+    cert_pem = cert_path.read_bytes()
+    cert_obj = x509.load_pem_x509_certificate(cert_pem)
+    pub_pem = cert_obj.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode()
+
+    return {
+        "publicKey": pub_pem,
+        "sessionId": sessionId,
+    }
+
+
 @app.post("/api/tamper")
-async def tamper_pdf(fileId: str = Form(...)):
+def tamper_pdf(fileId: str = Form(...)):
     """Create a tampered copy of a signed PDF for demo purposes."""
     signed_path = SIGNED_DIR / f"{fileId}.pdf"
     if not signed_path.exists():

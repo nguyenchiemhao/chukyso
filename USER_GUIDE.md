@@ -42,13 +42,44 @@ Giao diện gồm 3 phần chính:
 1. Ở panel bên trái, nhấn nút **"Generate RSA Key Pair"**
 2. Chờ hệ thống tạo khóa (vài giây)
 3. Sau khi hoàn tất, bạn sẽ thấy:
-   - **Public Key (Verification)** — hiển thị đầy đủ, dùng để xác minh
-   - **Private Key (Signing)** — ẩn mặc định, nhấn 👁 để hiện/ẩn
+   - **Public Key (Verification)** ✓ Công khai — dùng để xác minh chữ ký
+   - **Private Key (Signing)** 🔒 Bí mật — dùng để tạo chữ ký, giấu kín
+
+### 💡 Public Key vs Private Key — Sự khác biệt là gì?
+
+**Private Key (Khóa bí mật) — Chỉ bạn có**
+- ⚠️ Giữ bí mật, không chia sẻ với ai
+- 🔐 Dùng để **SIGN** — tạo chữ ký lên tài liệu
+- Nếu bị lộ, người khác có thể giả mạo chữ ký của bạn
+
+**Public Key (Khóa công khai) — Ai cũng có thể biết**
+- ✓ An toàn để chia sẻ công khai
+- 🔓 Dùng để **VERIFY** — kiểm tra chữ ký của bạn
+- Mọi người dùng key này để xác minh chữ ký đều của bạn
+
+**Ví dụ thực tế:**
+- Private Key = Chữ ký tay của bạn trên hợp đồng (chỉ bạn biết dấu)
+- Public Key = Ảnh/bản sao chữ ký bạn in ra để mọi người đối chiếu
+
+**Quy trình:**
+```
+BẠN LÝ:                    NGƯỜI KIỂM TRA:
+┌─────────────┐            ┌──────────────────┐
+│ File PDF    │            │ File PDF đã ký   │
+│    ↓        │            │      ↓           │
+│ Private Key │   ====>    │ Public Key       │
+│    ↓        │            │      ↓           │
+│  Ký lên     │            │  So sánh         │
+│  (SIGN)     │            │  (VERIFY)        │
+└─────────────┘            └──────────────────┘
+     ✅                          ✅ VALID or ❌ INVALID
+```
 
 ### Lưu ý:
 - Mỗi lần nhấn "Generate" sẽ tạo cặp khóa **mới hoàn toàn**
 - Cặp khóa cũ sẽ không sử dụng được nữa cho lần ký/xác minh tiếp theo
 - Khóa dùng thuật toán **RSA-2048** với certificate tự ký
+- **Luôn giữ private key bí mật**; public key có thể chia sẻ tự do
 
 ---
 
@@ -129,6 +160,70 @@ Giao diện gồm 3 phần chính:
 
 ---
 
+## 6.1 Chia sẻ Public Key để người khác xác minh
+
+**Kịch bản:** Bạn muốn gửi file PDF đã ký cho bạn A. Bạn A muốn xác minh rằng file đó thực sự do bạn ký.
+
+**Cách làm:**
+
+### Bạn (người ký) gửi:
+1. Ở panel bên trái, nhấn nút **"Generate RSA Key Pair"**
+2. Sau khi tạo khóa, bạn sẽ thấy **Public Key** (xanh dương)
+3. Nhấn nút **Copy** để sao chép public key
+4. **Chia sẻ công khai** public key này cho bạn A (email, messenger, etc.)
+5. Ký PDF và **Tải file đã ký** xuống
+6. Gửi file đã ký cho bạn A
+
+### Bạn A (người kiểm tra) làm:
+1. **Nhận**: File PDF đã ký + **Public Key** của bạn
+2. **Truy cập ứng dụng**: Mở http://localhost:5173
+3. **Tạo session mới**: Nhấn "Generate RSA Key Pair" để tạo session (không ảnh hưởng đến xác minh)
+4. **Xác minh file**:
+    - Cuộn xuống section **"Verify with External Public Key:"** (phía dưới)
+    - **Dán public key** mà bạn gửi vào textarea
+       - Public key phải bắt đầu với: `-----BEGIN PUBLIC KEY-----`
+       - Và kết thúc với: `-----END PUBLIC KEY-----`
+    - Có thể nhấn **"Use My Current Public Key"** nếu muốn test với key hiện tại của session
+    - Nhấn **"Verify with This Public Key"**
+   - Chọn file PDF mà bạn gửi
+5. **Xem kết quả:**
+   - ✅ **VALID SIGNATURE** → File thật, bạn đã ký, không ai sửa đổi
+   - ❌ **INVALID SIGNATURE** → File bị giả mạo hoặc sửa đổi
+   - ⚠️ Nếu báo **Request failed (400)**: Hãy kiểm tra:
+       - Đã paste đầy đủ public key? (bắt đầu với `-----BEGIN PUBLIC KEY-----` và kết thúc với `-----END PUBLIC KEY-----`)
+     - Không có dòng trống hoặc ký tự lạ ở đầu/cuối?
+
+**Ví dụ Public Key format:**
+```
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQE...
+[... nhiều dòng nữa ...]
+-----END PUBLIC KEY-----
+```
+
+**Lưu ý:**
+- ✓ Ứng dụng external verify chỉ nhận **PUBLIC KEY**
+- ✓ Có thể verify nhiều file từ cùng một người nếu dùng đúng public key của người đó
+- ⚠️ Nếu dán certificate hoặc private key, hệ thống sẽ báo lỗi định dạng
+
+**Ví dụ thực tế:**
+
+```
+Bạn (Người ký):
+├─ Generate key → có PUBLIC KEY
+├─ Nhấn Copy → sao chép key
+├─ Gửi: "Đây là public key của tôi:" + (paste key từ clipboard)
+├─ Sign PDF → file.pdf.signed
+└─ Gửi file.pdf.signed cho bạn A
+
+Bạn A (Người kiểm tra):
+├─ Nhận file + public key
+├─ Mở app (session mới)
+├─ Paste public key vào "Verify with External Public Key"
+├─ Nhấn "Verify with This Public Key"
+└─ Chọn file PDF đã ký để kiểm tra
+```
+
 ## 7. Giải thích giao diện
 
 ### Progress Bar (thanh tiến trình)
@@ -175,8 +270,65 @@ Hiển thị trực quan luồng mã hóa:
 ### Q: Tại sao cần tạo khóa trước khi ký?
 **A:** Chữ ký số RSA yêu cầu cặp khóa bất đối xứng. Private key dùng để ký, public key (trong certificate) dùng để xác minh. Không có khóa thì không thể thực hiện quy trình.
 
+### Q: Private Key và Public Key khác nhau như thế nào?
+**A:**
+- **Private Key** (Khóa bí mật): Chỉ bạn có, dùng để ký. Giống chữ ký tay của bạn.
+- **Public Key** (Khóa công khai): Ai cũng có, dùng để xác minh chữ ký. Giống ảnh/mẫu chữ ký để mọi người đối chiếu.
+
+**Nguyên tắc quan trọng:**
+- Private key phải **giữ bí mật**
+- Public key có thể **chia sẻ công khai**
+
 ### Q: Tôi có thể dùng khóa của lần trước không?
 **A:** Trong phiên hiện tại, bạn có thể dùng lại khóa đã tạo. Nhưng nếu đã nhấn "Generate" lần nữa, cặp khóa cũ không còn khả dụng.
+
+### Q: Nếu tôi muốn xác minh file ký bởi người khác thì sao?
+**A:** Sử dụng mục **"Verify with Different Public Key"** ở cuối panel bên trái:
+1. Dán public key của person khác vào textbox
+2. Nhấn "Verify with This Key"
+3. Chọn file PDF họ ký
+4. Nếu valid → file thật, nếu invalid → bị sửa đổi
+
+### Q: Public key của người khác là gì?
+**A:** Là tệp text chứa certificate hoặc public key của họ. Thường có giá dạng:
+```
+-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAKHHChYPxxxxx...
+-----END CERTIFICATE-----
+```
+
+Họ có thể copy từ nút "Copy" bên cạnh Public Key của họ.
+
+### Q: Nếu file bị sửa đổi sau khi ký thì sao?
+**A:** Sẽ báo **INVALID SIGNATURE** vì hash không khớp nữa.
+
+### Q: Gặp lỗi "This endpoint verifies with PUBLIC KEY..." hoặc lỗi 400 khi verify external?
+**A:** Lỗi này xuất hiện khi bạn dán sai định dạng key. External verify chỉ nhận **PUBLIC KEY**.
+
+**Định dạng đúng:**
+- Bắt đầu: `-----BEGIN PUBLIC KEY-----`
+- Kết thúc: `-----END PUBLIC KEY-----`
+
+**Không hợp lệ:**
+- `-----BEGIN CERTIFICATE-----`
+- `-----BEGIN PRIVATE KEY-----`
+
+**Cách sửa:**
+1. Người ký nhấn nút **Copy** ở phần Public Key.
+2. Paste key vào ô **Verify with External Public Key**.
+3. Đảm bảo không thiếu dòng BEGIN/END và không có ký tự lạ ở đầu/cuối.
+
+### Q: Làm sao biết public key nào của người nào?
+**A:**
+- Người ký phải gửi kèm public key khi gửi file.
+- Public key đúng luôn có block `BEGIN/END PUBLIC KEY`.
+- Dùng đúng key của người đã ký file thì external verify mới báo VALID.
+
+### Q: Tại sao verify external vẫn có thể INVALID dù file là file đã ký?
+**A:** Có 3 nguyên nhân thường gặp:
+1. Bạn dán nhầm public key (không phải key của người ký file đó).
+2. File đã bị chỉnh sửa sau khi ký.
+3. Key bị copy thiếu hoặc sai định dạng PEM.
 
 ### Q: File PDF gốc có bị thay đổi không?
 **A:** Không. Hệ thống tạo một file PDF **mới** (signed copy) chứa chữ ký. File gốc không bị sửa.

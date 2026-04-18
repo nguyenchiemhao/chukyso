@@ -40,6 +40,35 @@ PDF gốc → Hash (SHA-256) → Ký bằng Private Key (RSA) → Chữ ký số
 3. Chữ ký và thông tin chứng thư được nhúng vào file PDF
 4. Người nhận dùng public key trong certificate để xác minh
 
+### RSA Key Pair (Cặp khóa RSA) — Vai trò của Public & Private Key
+
+Một RSA key pair bao gồm hai khóa có quan hệ toán học với nhau:
+
+| Khóa | Vai trò | Công khai? | Tác dụng |
+|---|---|---|---|
+| **Private Key** 🔒 | Ký tài liệu | Không (bí mật) | Dùng để **SIGN** — tạo chữ ký số |
+| **Public Key** 🔓 | Xác minh tài liệu | Có (công khai) | Dùng để **VERIFY** — kiểm tra chữ ký |
+
+**Cơ chế tương tự khóa vật lý:**
+- **Private Key** = Chìa khóa riêng (chỉ bạn có)
+- **Public Key** = Ổ khóa công khai (bạn chia sẻ cho mọi người)
+
+**Flow thực tế:**
+
+```
+SIGNING (riêng tư - chỉ bạn làm):
+Private Key + File Hash → RSA Encrypt → Digital Signature
+
+VERIFICATION (công khai - ai cũng làm được):
+Public Key + Signature → RSA Decrypt → So sánh với File Hash
+```
+
+**Ví dụ:**
+- Bạn ký hóa đơn bằng **private key** của mình
+- Người kiểm tra xác minh bằng **public key** của bạn
+- Nếu khớp → hóa đơn là thật, không ai sửa đổi
+- Nếu không khớp → hóa đơn bị giả mạo hoặc sửa đổi
+
 ---
 
 ## Kiến trúc dự án
@@ -162,9 +191,30 @@ python demo_verify_pdf.py --pdf output/pdf/tampered_demo.pdf
 | `POST` | `/api/generate-keys` | Tạo cặp khóa RSA-2048 + certificate |
 | `POST` | `/api/upload` | Upload file PDF, trả về SHA-256 hash |
 | `POST` | `/api/sign` | Ký PDF bằng pyHanko |
-| `POST` | `/api/verify` | Xác minh chữ ký PDF |
+| `POST` | `/api/verify` | Xác minh chữ ký PDF trong session |
+| `POST` | `/api/verify-external` | Xác minh chữ ký PDF với public key bất kỳ |
+| `POST` | `/api/export-public-key` | Xuất public key từ session |
 | `GET` | `/api/download/{id}` | Tải file PDF đã ký |
 | `POST` | `/api/tamper` | Tạo bản PDF bị sửa đổi (demo) |
+
+### Verify External (Xác minh với public key bên ngoài)
+
+Endpoint `/api/verify-external` cho phép xác minh file PDF được ký bởi **ai đó khác**:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/verify-external \
+  -F "file=@signed_by_someone_else.pdf" \
+  -F "publicKey=-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAKHHChYPxxxxxx...
+-----END CERTIFICATE-----"
+```
+
+**Trường hợp dùng:**
+1. Bạn nhận file PDF được ký bởi bạn A
+2. Bạn A gửi cho bạn công khai public key của họ
+3. Bạn dùng `/api/verify-external` với public key đó để xác minh
+4. Nếu hợp lệ → file thật, không ai sửa → ✓ VALID SIGNATURE
+5. Nếu không hợp lệ → file bị giả mạo → ✗ INVALID SIGNATURE
 
 ---
 

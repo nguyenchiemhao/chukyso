@@ -170,9 +170,18 @@
           </p>
           <p class="text-xs text-[#424754] mt-2 text-center">
             {{ store.verifyResult.valid
-              ? 'Cryptographic identity matches the provided public key.'
+              ? '✓ Cryptographic identity matches the provided public key.'
               : store.verifyResult.message }}
           </p>
+
+          <!-- Show which public key was used -->
+          <div class="mt-3 w-full bg-blue-50 border border-blue-200 rounded-lg p-2">
+            <p class="text-[9px] font-semibold text-blue-900 mb-1">🔑 Verified with Public Key:</p>
+            <p class="text-[9px] font-mono text-blue-700 break-all">
+              {{ store.verifyResult.usedPublicKey || store.publicKey.substring(0, 60) + '...' }}
+            </p>
+          </div>
+
           <!-- Detail info -->
           <div v-if="store.verifyResult.details?.length" class="mt-4 w-full text-left">
             <div v-for="d in store.verifyResult.details" :key="d.index"

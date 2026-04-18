@@ -7,7 +7,8 @@ export default defineConfig({
   plugins: [vue(), tailwindcss()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8000',
+      // Use 127.0.0.1 to avoid localhost/IPv6 resolution mismatch that can cause 502.
+      '/api': 'http://127.0.0.1:8000',
     },
   },
 })
