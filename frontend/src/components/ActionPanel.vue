@@ -51,37 +51,55 @@
           {{ store.hasKeys ? 'Regenerate RSA Key Pair' : 'Generate RSA Key Pair' }}
         </button>
 
-        <div v-if="store.hasKeys" class="space-y-4">
+        <div v-if="store.hasKeys" class="space-y-6">
+          <!-- Public Key Help Text -->
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p class="text-[11px] text-[#0058be] font-semibold mb-1">🔐 How RSA Keys Work:</p>
+            <p class="text-[10px] text-[#424754] leading-relaxed">
+              <strong>Private Key:</strong> Locked secret used to <strong>SIGN</strong> documents (only you have this)<br>
+              <strong>Public Key:</strong> Open key used to <strong>VERIFY</strong> signatures (you can share this)
+            </p>
+          </div>
+
           <div>
             <label class="text-[10px] uppercase tracking-widest font-bold text-[#424754] mb-2 flex items-center justify-between">
-              Public Key (Verification)
+              <span class="flex items-center gap-1">
+                Public Key
+                <span class="material-symbols-outlined text-xs text-[#0058be] cursor-help" title="Share this with others so they can verify your signatures">help</span>
+              </span>
               <button @click="copyToClipboard(store.publicKey, 'public')" class="flex items-center gap-1 text-[#727785] hover:text-[#0058be] transition-colors" title="Copy public key">
                 <span class="material-symbols-outlined text-sm">{{ copiedField === 'public' ? 'check_circle' : 'content_copy' }}</span>
                 <span class="text-[9px] font-medium">{{ copiedField === 'public' ? 'Copied!' : 'Copy' }}</span>
               </button>
             </label>
-            <div class="bg-[#f2f3fd] p-4 rounded-lg text-[10px] font-mono text-[#727785] break-all max-h-20 overflow-y-auto">
+            <div class="bg-[#f2f3fd] p-4 rounded-lg text-[10px] font-mono text-[#727785] break-all max-h-20 overflow-y-auto border border-blue-100">
               {{ store.publicKey }}
             </div>
+            <p class="text-[9px] text-[#727785] mt-2">✓ Safe to share - used to verify your signatures</p>
           </div>
+
           <div>
             <label class="text-[10px] uppercase tracking-widest font-bold text-[#424754] mb-2 flex items-center justify-between">
-              Private Key (Signing)
+              <span class="flex items-center gap-1">
+                Private Key
+                <span class="material-symbols-outlined text-xs text-red-500 cursor-help" title="Keep this secret - never share!">help</span>
+              </span>
               <button @click="copyToClipboard(store.privateKey, 'private')" class="flex items-center gap-1 text-[#727785] hover:text-[#0058be] transition-colors" title="Copy private key">
                 <span class="material-symbols-outlined text-sm">{{ copiedField === 'private' ? 'check_circle' : 'content_copy' }}</span>
                 <span class="text-[9px] font-medium">{{ copiedField === 'private' ? 'Copied!' : 'Copy' }}</span>
               </button>
             </label>
-            <div class="bg-[#f2f3fd] p-4 rounded-lg text-[10px] font-mono text-[#727785] break-all flex justify-between items-start gap-2">
+            <div class="bg-[#fff5f5] p-4 rounded-lg text-[10px] font-mono text-[#c92a2a] break-all flex justify-between items-start gap-2 border border-red-200">
               <span class="max-h-20 overflow-y-auto flex-1">
                 {{ showPrivateKey ? store.privateKey : '••••••••••••••••••••••••••••••••••••••••••••' }}
               </span>
               <button @click="showPrivateKey = !showPrivateKey" class="shrink-0 mt-0.5">
-                <span class="material-symbols-outlined text-sm hover:text-[#0058be] transition-colors">
+                <span class="material-symbols-outlined text-sm hover:text-[#c92a2a] transition-colors">
                   {{ showPrivateKey ? 'visibility' : 'visibility_off' }}
                 </span>
               </button>
             </div>
+            <p class="text-[9px] text-red-600 mt-2">⚠ Keep secret - used to sign documents</p>
           </div>
         </div>
       </div>
@@ -93,23 +111,51 @@
         @click="store.signPdf()"
         :disabled="!store.hasFile || !store.hasKeys || store.loading.sign"
         class="w-full py-5 bg-linear-to-br from-[#0058be] to-[#2170e4] text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed"
-        title="Sign the uploaded PDF with the private key"
+        title="Sign the uploaded PDF with your PRIVATE KEY"
       >
         <span v-if="store.loading.sign" class="material-symbols-outlined animate-spin">progress_activity</span>
         <span v-else class="material-symbols-outlined">edit_document</span>
-        Sign PDF Document
+        Sign PDF (with Private Key)
       </button>
       <button
         @click="triggerVerify"
         :disabled="!store.hasKeys"
         class="w-full py-5 bg-[#6cf8bb] text-[#00714d] font-bold rounded-xl hover:bg-[#4edea3] transition-all flex items-center justify-center gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
-        title="Verify a signed PDF against the public key"
+        title="Verify a signed PDF using your PUBLIC KEY"
       >
         <span v-if="store.loading.verify" class="material-symbols-outlined animate-spin">progress_activity</span>
         <span v-else class="material-symbols-outlined">verified_user</span>
-        Verify Signature
+        Verify Signature (with Public Key)
       </button>
       <input ref="verifyInput" type="file" accept=".pdf" class="hidden" @change="handleVerifyFile" />
+
+      <!-- External Verification by Public Key -->
+      <div class="pt-2 border-t border-[#ecedf7]">
+        <p class="text-[11px] font-semibold text-[#424754] mb-2">Verify with External Public Key:</p>
+        <p class="text-[10px] text-[#727785] mb-3">Dán PUBLIC KEY của người ký (BEGIN/END PUBLIC KEY), không dùng certificate.</p>
+        <textarea
+          v-model="externalPublicKey"
+          placeholder="Paste signer PUBLIC KEY: -----BEGIN PUBLIC KEY----- ... -----END PUBLIC KEY-----"
+          class="w-full p-3 border border-[#c2c6d6] rounded-lg text-[10px] font-mono resize-none h-20 focus:border-[#0058be] focus:ring-1 focus:ring-blue-300 transition-all"
+        ></textarea>
+        <button
+          @click="useMyPublicKey()"
+          :disabled="!store.publicKey"
+          class="w-full mt-2 py-2 bg-[#f2f3fd] text-[#0058be] font-semibold rounded-lg hover:bg-[#e6e7f2] transition-all disabled:opacity-40"
+        >
+          Use My Current Public Key
+        </button>
+        <button
+          @click="triggerExternalVerify"
+          :disabled="!externalPublicKey || store.loading.verify"
+          class="w-full mt-3 py-4 bg-[#e6e7f2] text-[#0058be] font-bold rounded-xl hover:bg-[#d8d9e3] transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+        >
+          <span v-if="store.loading.verify" class="material-symbols-outlined animate-spin">progress_activity</span>
+          <span v-else class="material-symbols-outlined">security</span>
+          Verify with This Public Key
+        </button>
+        <input ref="externalVerifyInput" type="file" accept=".pdf" class="hidden" @change="handleExternalVerifyFile" />
+      </div>
     </div>
 
     <!-- Error -->
@@ -123,12 +169,15 @@
 <script setup>
 import { ref } from 'vue'
 import { useSignatureStore } from '../stores/signature'
+import { verifyExternalSignature } from '../api'
 
 const store = useSignatureStore()
 const isDragging = ref(false)
 const showPrivateKey = ref(false)
 const verifyInput = ref(null)
+const externalVerifyInput = ref(null)
 const copiedField = ref(null)
+const externalPublicKey = ref('')
 
 function copyToClipboard(text, field) {
   navigator.clipboard.writeText(text).then(() => {
@@ -164,6 +213,40 @@ function triggerVerify() {
 function handleVerifyFile(e) {
   const file = e.target.files[0]
   if (file) store.verifySignature(file)
+  e.target.value = ''
+}
+
+function triggerExternalVerify() {
+  externalVerifyInput.value.click()
+}
+
+function useMyPublicKey() {
+  if (store.publicKey) {
+    externalPublicKey.value = store.publicKey
+  }
+}
+
+async function handleExternalVerifyFile(e) {
+  const file = e.target.files[0]
+  if (file && externalPublicKey.value) {
+    store.loading.verify = true
+    try {
+      const result = await verifyExternalSignature(file, externalPublicKey.value)
+      store.verifyResult = result
+      store.currentStep = 6
+    } catch (err) {
+      // Handle error response from backend
+      if (err.response && err.response.data && err.response.data.detail) {
+        store.error = `Verification failed: ${err.response.data.detail}`
+      } else if (err.response && err.response.status === 400) {
+        store.error = `Invalid request (400): Please ensure you pasted a valid PEM PUBLIC KEY starting with "-----BEGIN PUBLIC KEY-----"`
+      } else {
+        store.error = err.message || 'Verification failed'
+      }
+    } finally {
+      store.loading.verify = false
+    }
+  }
   e.target.value = ''
 }
 </script>
