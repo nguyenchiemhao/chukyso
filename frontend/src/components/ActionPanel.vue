@@ -53,13 +53,25 @@
 
         <div v-if="store.hasKeys" class="space-y-4">
           <div>
-            <label class="text-[10px] uppercase tracking-widest font-bold text-[#424754] mb-2 block">Public Key (Verification)</label>
+            <label class="text-[10px] uppercase tracking-widest font-bold text-[#424754] mb-2 flex items-center justify-between">
+              Public Key (Verification)
+              <button @click="copyToClipboard(store.publicKey, 'public')" class="flex items-center gap-1 text-[#727785] hover:text-[#0058be] transition-colors" title="Copy public key">
+                <span class="material-symbols-outlined text-sm">{{ copiedField === 'public' ? 'check_circle' : 'content_copy' }}</span>
+                <span class="text-[9px] font-medium">{{ copiedField === 'public' ? 'Copied!' : 'Copy' }}</span>
+              </button>
+            </label>
             <div class="bg-[#f2f3fd] p-4 rounded-lg text-[10px] font-mono text-[#727785] break-all max-h-20 overflow-y-auto">
               {{ store.publicKey }}
             </div>
           </div>
           <div>
-            <label class="text-[10px] uppercase tracking-widest font-bold text-[#424754] mb-2 block">Private Key (Signing)</label>
+            <label class="text-[10px] uppercase tracking-widest font-bold text-[#424754] mb-2 flex items-center justify-between">
+              Private Key (Signing)
+              <button @click="copyToClipboard(store.privateKey, 'private')" class="flex items-center gap-1 text-[#727785] hover:text-[#0058be] transition-colors" title="Copy private key">
+                <span class="material-symbols-outlined text-sm">{{ copiedField === 'private' ? 'check_circle' : 'content_copy' }}</span>
+                <span class="text-[9px] font-medium">{{ copiedField === 'private' ? 'Copied!' : 'Copy' }}</span>
+              </button>
+            </label>
             <div class="bg-[#f2f3fd] p-4 rounded-lg text-[10px] font-mono text-[#727785] break-all flex justify-between items-start gap-2">
               <span class="max-h-20 overflow-y-auto flex-1">
                 {{ showPrivateKey ? store.privateKey : '••••••••••••••••••••••••••••••••••••••••••••' }}
@@ -116,6 +128,14 @@ const store = useSignatureStore()
 const isDragging = ref(false)
 const showPrivateKey = ref(false)
 const verifyInput = ref(null)
+const copiedField = ref(null)
+
+function copyToClipboard(text, field) {
+  navigator.clipboard.writeText(text).then(() => {
+    copiedField.value = field
+    setTimeout(() => { copiedField.value = null }, 2000)
+  })
+}
 
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' B'
